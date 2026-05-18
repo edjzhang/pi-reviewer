@@ -43,6 +43,63 @@ describe("createEventAccumulator", () => {
     expect(acc.getLastReviewText()).toBe("Review result");
   });
 
+  it("captures text from message_end event (pi --mode json format)", () => {
+    const acc = createEventAccumulator(() => {});
+    acc.process(JSON.stringify({
+      type: "message_end",
+      message: { role: "assistant", content: "Review from message_end" },
+    }));
+    expect(acc.getLastReviewText()).toBe("Review from message_end");
+  });
+
+  it("captures text from message_end with content array (thinking + text)", () => {
+    const acc = createEventAccumulator(() => {});
+    acc.process(JSON.stringify({
+      type: "message_end",
+      message: {
+        role: "assistant",
+        content: [
+          { type: "thinking", thinking: "Let me analyze this..." },
+          { type: "text", text: "The actual review text" },
+        ],
+      },
+    }));
+    expect(acc.getLastReviewText()).toBe("The actual review text");
+  });
+
+  it("handles message_end after thinking events (no thinking-only error)", () => {
+    const acc = createEventAccumulator(() => {});
+    const onProgress = vi.fn();
+    const accWithProgress = createEventAccumulator(() => {}, { onProgress });
+
+    // Simulate pi --mode json event sequence: thinking_start, thinking_delta, text_start, text_delta, message_end
+    accWithProgress.process(JSON.stringify({
+      type: "message_update",
+      assistantMessageEvent: { type: "thinking_start", contentIndex: 0 },
+    }));
+    accWithProgress.process(JSON.stringify({
+      type: "message_update",
+      assistantMessageEvent: { type: "thinking_delta", delta: "Analyzing..." },
+    }));
+    accWithProgress.process(JSON.stringify({
+      type: "message_update",
+      assistantMessageEvent: { type: "text_start", contentIndex: 1 },
+    }));
+    accWithProgress.process(JSON.stringify({
+      type: "message_end",
+      message: {
+        role: "assistant",
+        content: [
+          { type: "thinking", thinking: "Analyzing..." },
+          { type: "text", text: "{ \"summary\": \"LGTM\", \"comments\": [] }" },
+        ],
+      },
+    }));
+
+    expect(accWithProgress.getLastReviewText()).toContain("LGTM");
+    expect(accWithProgress.hadThinkingOnly()).toBe(false);
+  });
+
   it("keeps last non-empty text across multiple turn_end events", () => {
     const acc = createEventAccumulator(() => {});
     acc.process(JSON.stringify({ type: "turn_end", message: { role: "assistant", content: "" } }));
@@ -51,10 +108,44 @@ describe("createEventAccumulator", () => {
     expect(acc.getLastReviewText()).toBe("Final review");
   });
 
-  it("does not overwrite with empty text from intermediate tool-use turns", () => {
+  it("preserves a valid review when a later turn has only preamble text", () => {
+    const acc = createEventAccumulator(() => {});
+    const validReview = JSON.stringify({
+      summary: "Looks good",
+      comments: [{ file: "src/index.ts", line: 1, side: "RIGHT", severity: "INFO", body: "Minor nit" }],
+    });
+    acc.process(JSON.stringify({ type: "turn_end", message: { role: "assistant", content: validReview } }));
+    // A later turn with only preamble text should not overwrite the valid review
+    acc.process(JSON.stringify({ type: "turn_end", message: { role: "assistant", content: "Now I have enough information to complete the review." } }));
+    expect(acc.getLastReviewText()).toBe(validReview);
+  });
+
+  it("accumulates partial text when no turn produces a valid review", () => {
+    const acc = createEventAccumulator(() => {});
+    acc.process(JSON.stringify({ type: "turn_end", message: { role: "assistant", content: "Checking the files now." } }));
+    acc.process(JSON.stringify({ type: "turn_end", message: { role: "assistant", content: "The diff looks reasonable." } }));
+    expect(acc.getLastReviewText()).toBe("Checking the files now.\n\nThe diff looks reasonable.");
+  });
+
+  it("prefers valid review over accumulated partial text", () => {
+    const acc = createEventAccumulator(() => {});
+    acc.process(JSON.stringify({ type: "turn_end", message: { role: "assistant", content: "Let me check." } }));
+    const validReview = JSON.stringify({
+      summary: "Found issues",
+      comments: [{ file: "app.ts", line: 10, side: "RIGHT", severity: "WARN", body: "Missing error handling" }],
+    });
+    acc.process(JSON.stringify({ type: "turn_end", message: { role: "assistant", content: validReview } }));
+    acc.process(JSON.stringify({ type: "turn_end", message: { role: "assistant", content: "Done reviewing." } }));
+    // The valid review should win, and the later preamble should not overwrite it
+    expect(acc.getLastReviewText()).toBe(validReview);
+  });
+
+  it("preserves earlier text when a later turn has only tool-use content", () => {
     const acc = createEventAccumulator(() => {});
     acc.process(JSON.stringify({ type: "turn_end", message: { role: "assistant", content: "First review" } }));
     acc.process(JSON.stringify({ type: "turn_end", message: { role: "assistant", content: [{ type: "tool_use", id: "x" }] } }));
+    // "First review" is not valid JSON review, so it accumulates.
+    // The tool-use turn has no text content, so it doesn't add anything.
     expect(acc.getLastReviewText()).toBe("First review");
   });
 

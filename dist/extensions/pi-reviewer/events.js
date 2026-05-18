@@ -1,4 +1,4 @@
-import { extractAssistantText } from "../../src/core/output.js";
+import { extractAssistantText, parseAgentResponse } from "../../src/core/output.js";
 function accumulateUsage(acc, u) {
     acc.inputTokens += u.input;
     acc.outputTokens += u.output;
@@ -11,8 +11,19 @@ function accumulateUsage(acc, u) {
 function emptyUsage() {
     return { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, totalTokens: 0, cost: 0, turns: 0 };
 }
+/**
+ * Try parsing text as a valid ReviewResult. Returns true if it has both
+ * a string summary and a comments array of valid ReviewComment objects.
+ */
+function isValidReviewResult(text) {
+    const result = parseAgentResponse(text, "INFO");
+    return result.comments.length > 0 || result.summary !== text;
+    // If parseAgentResponse found valid JSON, summary will differ from raw text.
+    // If it fell through to { summary: text, comments: [] }, the summary === text.
+}
 export function createEventAccumulator(onUnexpected, options) {
-    let lastReviewText = "";
+    let bestReviewText = "";
+    let textParts = [];
     let tokenUsage;
     let thinkingBuf = "";
     let textStarted = false;
@@ -31,7 +42,7 @@ export function createEventAccumulator(onUnexpected, options) {
                 return;
             }
             const ev = event;
-            if (ev?.type === "turn_end") {
+            if (ev?.type === "turn_end" || ev?.type === "message_end") {
                 const msg = ev.message;
                 if (msg?.stopReason === "error") {
                     apiError = true;
@@ -43,8 +54,18 @@ export function createEventAccumulator(onUnexpected, options) {
                     accumulateUsage(tokenUsage, msg.usage);
                 }
                 const text = extractAssistantText(ev.message);
-                if (text)
-                    lastReviewText = text;
+                if (text) {
+                    // If this turn's text is a valid review on its own, use it directly.
+                    // Otherwise, accumulate it with previous partial texts so
+                    // parseAgentResponse can extract JSON from the concatenated result.
+                    if (isValidReviewResult(text)) {
+                        bestReviewText = text;
+                        textParts = [];
+                    }
+                    else {
+                        textParts.push(text);
+                    }
+                }
             }
             else if (ev?.type === "message_update") {
                 const aev = ev.assistantMessageEvent;
@@ -71,13 +92,20 @@ export function createEventAccumulator(onUnexpected, options) {
             }
         },
         getLastReviewText() {
-            return lastReviewText;
+            // If we found a valid review, return it.
+            // Otherwise, concatenate accumulated text parts so parseAgentResponse
+            // can try to extract JSON from the combined output.
+            if (bestReviewText)
+                return bestReviewText;
+            if (textParts.length > 0)
+                return textParts.join("\n\n");
+            return "";
         },
         getTokenUsage() {
             return tokenUsage;
         },
         hadThinkingOnly() {
-            return hadThinking && !lastReviewText;
+            return hadThinking && !bestReviewText && textParts.length === 0;
         },
         hadAPIError() {
             return apiError;
