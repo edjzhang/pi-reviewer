@@ -9,6 +9,7 @@ export interface PiReviewerConfig {
   theme?: "dark" | "light";
   viewMode?: "split" | "unified";
   verbose?: boolean;
+  ui?: boolean;
   minSeverity?: MinSeverity;
   model?: string;
   thinking?: ThinkingLevel;
@@ -60,6 +61,7 @@ export function applyConfigPatch(patch: Partial<PiReviewerConfig>): void {
 export function readTheme(): "dark" | "light" { return readConfig().theme ?? "dark"; }
 export function readViewMode(): "split" | "unified" { return readConfig().viewMode ?? "split"; }
 export function readVerbose(): boolean { return readConfig().verbose ?? false; }
+export function readUi(): boolean { return readConfig().ui ?? false; }
 export function readMinSeverity(): MinSeverity { return readConfig().minSeverity ?? "INFO"; }
 export function readModel(): string | undefined { return readConfig().model; }
 export function readThinking(): string | undefined { return readConfig().thinking as ThinkingLevel | undefined; }

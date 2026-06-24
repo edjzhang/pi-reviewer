@@ -10,7 +10,7 @@ import type { UIModelConfig, UIAction, UIServerHandle } from "./types.js";
 
 export type { ModelInfo, UIModelConfig, ActionType, CommentDecision, UIAction, UIServerHandle } from "./types.js";
 export type { ContextGroup } from "../../context.js";
-export { readTheme, readViewMode, readVerbose, readMinSeverity, readModel, readThinking, readDefaultBranch } from "../../config.js";
+export { readTheme, readViewMode, readVerbose, readUi, readMinSeverity, readModel, readThinking, readDefaultBranch } from "../../config.js";
 
 const HEARTBEAT_MS = 45_000;
 

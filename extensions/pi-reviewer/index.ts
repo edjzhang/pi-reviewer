@@ -3,7 +3,7 @@ import { execSync } from "node:child_process";
 import path from "node:path";
 
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { readVerbose, readMinSeverity, readModel, readThinking } from "../../src/core/ui/server/index.js";
+import { readVerbose, readMinSeverity, readModel, readThinking, readUi } from "../../src/core/ui/server/index.js";
 import { parseArgs } from "./args.js";
 import { resolveCurrentModelId } from "./model.js";
 import { handleDryRun } from "./handlers/dry-run.js";
@@ -32,6 +32,8 @@ function resolveCommonOpts(
 ): CommonHandlerOptions {
   const minSeverity = parsed.minSeverity ?? readMinSeverity();
   const verbose = parsed.verbose ?? readVerbose();
+  const ui = parsed.ui || readUi();
+  parsed.ui = ui;
   const model = parsed.model ?? readModel();
   const thinking = parsed.thinking ?? readThinking();
   const defaultModel = readModel();

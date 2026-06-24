@@ -46,6 +46,7 @@ export function applyConfigPatch(patch) {
 export function readTheme() { return readConfig().theme ?? "dark"; }
 export function readViewMode() { return readConfig().viewMode ?? "split"; }
 export function readVerbose() { return readConfig().verbose ?? false; }
+export function readUi() { return readConfig().ui ?? false; }
 export function readMinSeverity() { return readConfig().minSeverity ?? "INFO"; }
 export function readModel() { return readConfig().model; }
 export function readThinking() { return readConfig().thinking; }
