@@ -120,9 +120,18 @@ export default function App() {
       if (!decisions[i]?.decision) {
         const targetFile = result.comments[i]?.file;
         if (targetFile) setOpenFiles((prev) => ({ ...prev, [targetFile]: true }));
-        setTimeout(() => {
-          document.getElementById(`cmt-${i}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
-        }, 50);
+        // The file expands asynchronously: setOpenFiles → forceOpen prop →
+        // FileDiff's useEffect(setCollapsed(false)) → re-render. A single
+        // timeout may fire before the file-body is visible (the comment sits
+        // inside grid-template-rows: 0fr). Triple rAF covers the prop →
+        // useEffect → re-render → paint chain before scrolling.
+        requestAnimationFrame(() =>
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() =>
+              document.getElementById(`cmt-${i}`)?.scrollIntoView({ behavior: "smooth", block: "center" })
+            )
+          )
+        );
         return;
       }
     }

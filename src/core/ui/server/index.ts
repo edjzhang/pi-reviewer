@@ -12,7 +12,13 @@ export type { ModelInfo, UIModelConfig, ActionType, CommentDecision, UIAction, U
 export type { ContextGroup } from "../../context.js";
 export { readTheme, readViewMode, readVerbose, readUi, readMinSeverity, readModel, readThinking, readDefaultBranch } from "../../config.js";
 
-const HEARTBEAT_MS = 45_000;
+// 5 minutes — long enough that a human reviewing a real diff isn't cut off,
+// while the 30s frontend pings keep it alive while the tab is open. The
+// pagehide handler covers the normal close; this is just a safety net for
+// crashed/closed-without-events. (Was 45s, which auto-closed mid-review when
+// a backgrounded tab throttled the ping interval — the agent then proceeded
+// without the human's decision, defeating the gate.)
+const HEARTBEAT_MS = 300_000;
 
 export async function startUIServer(
   result: ReviewResult,
